@@ -50,16 +50,17 @@ export default function NewScanPage() {
     const [currentStep, setCurrentStep] = useState(1);
     const [loading, setLoading] = useState(false);
     const [geocoding, setGeocoding] = useState(false);
+    const [locationResolved, setLocationResolved] = useState(true);
     const [scanMode, setScanMode] = useState<'QUICK' | 'BUSINESS'>('QUICK');
     const [formData, setFormData] = useState({
         keyword: '',
         businessName: '',
-        address: '',
+        address: 'Rua Edgar Dantas, 106, 1º andar, sala 7, Centro, Parnamirim - RN, 59140-290, Brazil',
         radius: 5,
         gridSize: 3,
         frequency: 'ONCE',
-        centerLat: 40.7128, // Default NYC
-        centerLng: -74.0060,
+        centerLat: -5.9181, // Clínica São Paulo, Centro de Parnamirim/RN
+        centerLng: -35.2625,
         shape: 'SQUARE' as 'SQUARE' | 'CIRCLE' | 'ZIP' | 'SMART',
     });
     const [customPoints, setCustomPoints] = useState<any[] | null>(null);
@@ -91,7 +92,7 @@ export default function NewScanPage() {
     const [countries, setCountries] = useState<any[]>([]);
     const [states, setStates] = useState<any[]>([]);
     const [cities, setCities] = useState<any[]>([]);
-    const [selectedCountry, setSelectedCountry] = useState('US');
+    const [selectedCountry, setSelectedCountry] = useState('BR');
     const [selectedState, setSelectedState] = useState('');
     const [selectedCity, setSelectedCity] = useState('');
 
@@ -178,10 +179,14 @@ export default function NewScanPage() {
                     ...prev,
                     businessName: data.business.name,
                     address: data.business.address || prev.address,
-                    centerLat: data.business.lat || prev.centerLat,
-                    centerLng: data.business.lng || prev.centerLng,
+                    centerLat: typeof data.business.lat === 'number' && Number.isFinite(data.business.lat) ? data.business.lat : prev.centerLat,
+                    centerLng: typeof data.business.lng === 'number' && Number.isFinite(data.business.lng) ? data.business.lng : prev.centerLng,
                     placeId: data.business.placeId
                 }));
+                setLocationResolved(
+                    typeof data.business.lat === 'number' && Number.isFinite(data.business.lat) &&
+                    typeof data.business.lng === 'number' && Number.isFinite(data.business.lng)
+                );
                 if (!urlOverride) setLookupUrl('');
                 setIsUrlImport(false);
                 setLookupResults([]); // Clear any previous search results
@@ -204,6 +209,7 @@ export default function NewScanPage() {
         }));
         setIsManualValue(false);
         setLookupResults([]);
+        setLocationResolved(false);
 
         // If the result has a URL, we can do a deep lookup to get coordinates and full address
         if (biz.url) {
@@ -231,7 +237,7 @@ export default function NewScanPage() {
                 router.push(`/scans/${scan.id}`);
             } else {
                 const errData = await res.json();
-                throw new Error(errData.details || errData.error || 'Failed to create scan');
+                throw new Error(errData.error || 'Failed to create scan');
             }
         } catch (error) {
             console.error('Failed to create scan:', error);
@@ -261,8 +267,13 @@ export default function NewScanPage() {
         try {
             const res = await fetch(`/api/geocode?address=${encodeURIComponent(formData.address)}`);
             const data = await res.json();
-            if (data.lat && data.lng) {
+            if (res.ok && Number.isFinite(data.lat) && Number.isFinite(data.lng) &&
+                data.lat >= -90 && data.lat <= 90 && data.lng >= -180 && data.lng <= 180) {
                 setFormData(prev => ({ ...prev, centerLat: data.lat, centerLng: data.lng }));
+                setLocationResolved(true);
+            } else {
+                setLocationResolved(false);
+                alert('Não foi possível confirmar esse endereço no mapa. Verifique o endereço e tente novamente.');
             }
         } catch (err) {
             console.error('Geocoding failed:', err);
@@ -284,6 +295,7 @@ export default function NewScanPage() {
 
             if (data.points && data.points.length > 0) {
                 setCustomPoints(data.points);
+                setLocationResolved(true);
                 // Center on the city metadata returned by Nominatim if available, else average
                 const centerLat = data.cityMeta?.lat || (data.points.reduce((sum: number, p: any) => sum + p.lat, 0) / data.points.length);
                 const centerLng = data.cityMeta?.lng || (data.points.reduce((sum: number, p: any) => sum + p.lng, 0) / data.points.length);
@@ -312,7 +324,7 @@ export default function NewScanPage() {
     const canProceed = () => {
         if (currentStep === 1) {
             if (scanMode === 'BUSINESS' && !formData.businessName) return false;
-            return formData.keyword && formData.address;
+            return Boolean(formData.keyword.trim() && formData.address.trim() && locationResolved);
         }
         if (currentStep === 2) return formData.radius > 0 && formData.gridSize >= 3;
         return true;
@@ -367,7 +379,7 @@ export default function NewScanPage() {
                                 <div className="flex justify-between items-start">
                                     <div>
                                         <h2 className="text-xl font-bold text-gray-900 mb-1">Search Parameters</h2>
-                                        <p className="text-gray-500 text-sm">Enter the business term and location center.</p>
+                                        <p className="text-gray-500 text-sm">Enter the search term and confirm the map location before continuing.</p>
                                     </div>
                                     <div className="flex bg-gray-100 p-1 rounded-lg">
                                         <button
@@ -479,7 +491,10 @@ export default function NewScanPage() {
                                                     placeholder="e.g. Times Square, NY"
                                                     icon={<MapPin size={16} />}
                                                     value={formData.address}
-                                                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                                                    onChange={(e) => {
+                                                        setFormData({ ...formData, address: e.target.value });
+                                                        setLocationResolved(false);
+                                                    }}
                                                     className="flex-1"
                                                 />
                                                 <Button
@@ -503,7 +518,10 @@ export default function NewScanPage() {
                                             zoom={13}
                                             selectionMode={true}
                                             onCenterChange={(lat, lng) => setFormData(prev => ({ ...prev, centerLat: lat, centerLng: lng }))}
-                                            onGridMove={(lat, lng) => setFormData(prev => ({ ...prev, centerLat: lat, centerLng: lng }))}
+                                            onGridMove={(lat, lng) => {
+                                                setFormData(prev => ({ ...prev, centerLat: lat, centerLng: lng }));
+                                                setLocationResolved(true);
+                                            }}
                                             radius={formData.radius}
                                         />
                                         <div className="absolute top-2 right-2 z-[1000] opacity-0 group-hover:opacity-100 transition-opacity">
