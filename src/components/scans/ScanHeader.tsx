@@ -8,6 +8,8 @@ interface ScanHeaderProps {
     onRerun: () => void;
     onDelete: () => void;
     onExportXLSX: () => void;
+    onExportCSV: () => void;
+    onExportJSON: () => void;
     onExportPDF: () => void;
     onShare: () => void;
     onCancelSchedule?: () => void;
@@ -25,7 +27,7 @@ function formatNextRun(nextRun: string | null) {
     return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
-export function ScanHeader({ scan, onStop, onRerun, onDelete, onExportXLSX, onExportPDF, onShare, onCancelSchedule }: ScanHeaderProps) {
+export function ScanHeader({ scan, onStop, onRerun, onDelete, onExportXLSX, onExportCSV, onExportJSON, onExportPDF, onShare, onCancelSchedule }: ScanHeaderProps) {
     const isScheduled = scan.frequency && scan.frequency !== 'ONCE';
     const nextRunText = formatNextRun(scan.nextRun);
     return (
@@ -98,6 +100,12 @@ export function ScanHeader({ scan, onStop, onRerun, onDelete, onExportXLSX, onEx
                 <div className="flex gap-1">
                     <Button variant="outline" size="sm" onClick={onExportXLSX}>
                         <Download size={14} className="mr-2" /> XLSX
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={onExportCSV}>
+                        <Download size={14} className="mr-2" /> CSV
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={onExportJSON}>
+                        <Download size={14} className="mr-2" /> JSON
                     </Button>
                     <Button variant="outline" size="sm" onClick={onExportPDF}>
                         <Download size={14} className="mr-2" /> PDF
