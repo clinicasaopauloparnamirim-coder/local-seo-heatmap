@@ -188,6 +188,144 @@ export async function exportAllScansToXLSX(scans: any[]) {
     window.URL.revokeObjectURL(url);
 }
 
+function parseTopResultsForExport(topResults: unknown): any[] {
+    if (Array.isArray(topResults)) return topResults;
+    if (typeof topResults !== 'string' || !topResults.trim()) return [];
+    try {
+        const parsed = JSON.parse(topResults);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        return [];
+    }
+}
+
+function buildExportRows(scanName: string, data: any[], scan?: Partial<ScanData>) {
+    const rows: Record<string, string | number | boolean | null>[] = [];
+    data.forEach((point, pointIndex) => {
+        const businesses = parseTopResultsForExport(point?.topResults);
+        const common = {
+            scan_keyword: scan?.keyword || scanName,
+            business_tracked: scan?.businessName || '',
+            scan_id: scan?.id || '',
+            scan_status: scan?.status || '',
+            scan_created_at: scan?.createdAt || '',
+            grid_size: scan?.gridSize ?? '',
+            radius_km: scan?.radius ?? '',
+            center_latitude: scan?.centerLat ?? '',
+            center_longitude: scan?.centerLng ?? '',
+            grid_point_index: pointIndex + 1,
+            point_latitude: point?.lat ?? '',
+            point_longitude: point?.lng ?? '',
+            target_rank: point?.rank ?? '',
+            run_id: point?.runId || '',
+            run_at: point?.runAt || point?.capturedAt || '',
+        };
+        if (businesses.length === 0) {
+            rows.push({
+                ...common,
+                result_rank: '',
+                result_name: '',
+                place_id: '',
+                cid: '',
+                rating: '',
+                review_count: '',
+                category: '',
+                address: '',
+                phone: '',
+                website: '',
+            });
+            return;
+        }
+        businesses.forEach((business: any) => {
+            rows.push({
+                ...common,
+                result_rank: business?.rank ?? '',
+                result_name: business?.name ?? '',
+                place_id: business?.placeId ?? business?.place_id ?? '',
+                cid: business?.cid ?? '',
+                rating: business?.rating ?? '',
+                review_count: business?.reviews ?? business?.reviewCount ?? '',
+                category: business?.category ?? business?.type ?? '',
+                address: business?.address ?? '',
+                phone: business?.phone ?? '',
+                website: business?.website ?? business?.url ?? '',
+            });
+        });
+    });
+    return rows;
+}
+
+function csvCell(value: unknown): string {
+    const raw = value === null || value === undefined ? '' : String(value);
+    const safe = /^[=+@]/.test(raw) || /^-\\s/.test(raw) ? "'" + raw : raw;
+    return '"' + safe.replace(/"/g, '""') + '"';
+}
+
+function triggerExportDownload(filename: string, blob: Blob): void {
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+}
+
+export function exportToCSV(scanName: string, data: any[], scan?: Partial<ScanData>): void {
+    const rows = buildExportRows(scanName, data, scan);
+    const headers = rows.length ? Object.keys(rows[0]) : [
+        'scan_keyword', 'business_tracked', 'scan_id', 'scan_status', 'scan_created_at',
+        'grid_size', 'radius_km', 'center_latitude', 'center_longitude', 'grid_point_index',
+        'point_latitude', 'point_longitude', 'target_rank', 'run_id', 'run_at', 'result_rank',
+        'result_name', 'place_id', 'cid', 'rating', 'review_count', 'category', 'address',
+        'phone', 'website',
+    ];
+    const csv = [headers.map(csvCell).join(','), ...rows.map(row => headers.map(header => csvCell(row[header])).join(','))].join('\\r\\n');
+    const filename = (scanName || 'heatmap').trim().replace(/[^\\p{L}\\p{N}_-]+/gu, '_') || 'heatmap';
+    triggerExportDownload(filename + '_results.csv', new Blob(['\\uFEFF', csv], { type: 'text/csv;charset=utf-8;' }));
+}
+
+export function exportToJSON(scanName: string, data: any[], scan?: Partial<ScanData>): void {
+    const points = data.map((point, index) => ({
+        pointIndex: index + 1,
+        id: point?.id ?? null,
+        latitude: point?.lat ?? null,
+        longitude: point?.lng ?? null,
+        targetRank: point?.rank ?? null,
+        targetName: point?.targetName ?? scan?.businessName ?? null,
+        placeId: point?.placeId ?? null,
+        cid: point?.cid ?? null,
+        runId: point?.runId ?? null,
+        runAt: point?.runAt ?? point?.capturedAt ?? null,
+        businesses: parseTopResultsForExport(point?.topResults),
+    }));
+    const payload = {
+        format: 'heartseomap-scan-export',
+        formatVersion: 1,
+        exportedAt: new Date().toISOString(),
+        scan: {
+            id: scan?.id ?? null,
+            keyword: scan?.keyword ?? scanName,
+            status: scan?.status ?? null,
+            businessName: scan?.businessName ?? null,
+            gridSize: scan?.gridSize ?? null,
+            radiusKm: scan?.radius ?? null,
+            frequency: scan?.frequency ?? null,
+            createdAt: scan?.createdAt ?? null,
+            center: {
+                latitude: scan?.centerLat ?? null,
+                longitude: scan?.centerLng ?? null,
+            },
+        },
+        totalGridPoints: points.length,
+        totalBusinessRows: points.reduce((sum, point) => sum + point.businesses.length, 0),
+        points,
+    };
+    const filename = (scanName || 'heatmap').trim().replace(/[^\\p{L}\\p{N}_-]+/gu, '_') || 'heatmap';
+    triggerExportDownload(filename + '_results.json', new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8;' }));
+}
+
 /**
  * Enhanced PDF Export - Comprehensive Visual Report
  */

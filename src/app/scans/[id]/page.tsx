@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import { RefreshCw, Trophy, List, ChevronLeft, ChevronRight, ExternalLink, MapPin, Layers, Eye, Target, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Card, Button, Badge, Input } from '@/components/ui';
-import { exportToXLSX, exportToPDF } from '@/lib/export';
+import { exportToXLSX, exportToPDF, exportToCSV, exportToJSON } from '@/lib/export';
 import { ScanHeader } from '@/components/scans/ScanHeader';
 // AIInsights removed as redundant
 import { PinInspectionSidebar } from '@/components/scans/PinInspectionSidebar';
@@ -301,6 +301,16 @@ export default function ScanReportPage({ params }: { params: Promise<{ id: strin
         exportToPDF(scan.keyword, scan.results, scan);
     };
 
+    const handleExportCSV = () => {
+        if (!scan) return;
+        exportToCSV(scan.keyword, scan.results, scan);
+    };
+
+    const handleExportJSON = () => {
+        if (!scan) return;
+        exportToJSON(scan.keyword, scan.results, scan);
+    };
+
     const handleShare = async () => {
         if (sharing) return;
         const url = window.location.href;
@@ -360,6 +370,8 @@ export default function ScanReportPage({ params }: { params: Promise<{ id: strin
                 onRerun={handleRerun}
                 onDelete={handleDelete}
                 onExportXLSX={handleExportXLSX}
+                onExportCSV={handleExportCSV}
+                onExportJSON={handleExportJSON}
                 onExportPDF={handleExportPDF}
                 onShare={handleShare}
                 onCancelSchedule={scan.frequency !== 'ONCE' ? handleCancelSchedule : undefined}
