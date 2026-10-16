@@ -257,7 +257,8 @@ function buildExportRows(scanName: string, data: any[], scan?: Partial<ScanData>
 
 function csvCell(value: unknown): string {
     const raw = value === null || value === undefined ? '' : String(value);
-    const safe = /^[=+@]/.test(raw) || /^-\\s/.test(raw) ? "'" + raw : raw;
+    // Reduce CSV formula injection risk when the file is opened in a spreadsheet.
+    const safe = /^[=+\-@]/.test(raw) ? "'" + raw : raw;
     return '"' + safe.replace(/"/g, '""') + '"';
 }
 
@@ -272,6 +273,10 @@ function triggerExportDownload(filename: string, blob: Blob): void {
     window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
 }
 
+function safeExportFilename(scanName: string): string {
+    return (scanName || 'heatmap').trim().replace(/[^\p{L}\p{N}_-]+/gu, '_') || 'heatmap';
+}
+
 export function exportToCSV(scanName: string, data: any[], scan?: Partial<ScanData>): void {
     const rows = buildExportRows(scanName, data, scan);
     const headers = rows.length ? Object.keys(rows[0]) : [
@@ -281,9 +286,8 @@ export function exportToCSV(scanName: string, data: any[], scan?: Partial<ScanDa
         'result_name', 'place_id', 'cid', 'rating', 'review_count', 'category', 'address',
         'phone', 'website',
     ];
-    const csv = [headers.map(csvCell).join(','), ...rows.map(row => headers.map(header => csvCell(row[header])).join(','))].join('\\r\\n');
-    const filename = (scanName || 'heatmap').trim().replace(/[^\\p{L}\\p{N}_-]+/gu, '_') || 'heatmap';
-    triggerExportDownload(filename + '_results.csv', new Blob(['\\uFEFF', csv], { type: 'text/csv;charset=utf-8;' }));
+    const csv = [headers.map(csvCell).join(','), ...rows.map(row => headers.map(header => csvCell(row[header])).join(','))].join('\r\n');
+    triggerExportDownload(safeExportFilename(scanName) + '_results.csv', new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8;' }));
 }
 
 export function exportToJSON(scanName: string, data: any[], scan?: Partial<ScanData>): void {
@@ -322,8 +326,7 @@ export function exportToJSON(scanName: string, data: any[], scan?: Partial<ScanD
         totalBusinessRows: points.reduce((sum, point) => sum + point.businesses.length, 0),
         points,
     };
-    const filename = (scanName || 'heatmap').trim().replace(/[^\\p{L}\\p{N}_-]+/gu, '_') || 'heatmap';
-    triggerExportDownload(filename + '_results.json', new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8;' }));
+    triggerExportDownload(safeExportFilename(scanName) + '_results.json', new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8;' }));
 }
 
 /**
